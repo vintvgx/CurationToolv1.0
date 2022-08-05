@@ -1,10 +1,11 @@
 #!/usr/bin/python3
-
 import glob
+from wsgiref.validate import WriteWrapper
 import PySimpleGUI as sg
 import shutil
 import os
 import csv
+import pandas as pd
 
 from cv2 import blur
 import detect_duplicates 
@@ -16,18 +17,19 @@ from PIL import Image, ImageTk
 
 sg.theme('DarkGrey13')
 
-good_destination = "Good_images"
-bad_destination = "Bad_images"
-curated_destination = "Good_images/Curated_Images"
+good_destination = "Filtering_result/sample_images"
+bad_destination = "Curation_result/Bad_images"
+curated_destination = "Curation_result/Good_images"
 good_directory = ""
 bad_directory = ""
+ext = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.svg', '.webp', '.avif', '.apng'] 
 pre_curate_done = False
 
 
  
 def pre_curation(path):
     blur_dir = os.path.join(path, 'Bad_images/blur_images')
-    dupli_dir = os.path.join(path, 'Bad_images/duplicate_images')
+    dupli_dir = os.path.join(path, 'Filtering_result/blur_images')
 
     if os.path.isdir(blur_dir) == True or os.path.isdir(dupli_dir) == True:
         pass
@@ -45,12 +47,12 @@ def parse_folder(path):
     good_directory = os.path.join(path, good_destination)
     bad_directory = os.path.join(path, bad_destination)
     curated_destination = os.path.join(path, curated_destination)
-    images_to_be_curated = sorted(glob.glob(f'{good_directory}/*.jpg') + glob.glob(f'{good_directory}/*.png'))
+    images_to_be_curated = sorted(glob.glob(f'{good_directory}/*{ext}'))
 
     os.makedirs(curated_destination, exist_ok=True)
     os.makedirs(good_directory, exist_ok=True)
     os.makedirs(bad_directory, exist_ok=True)
-    previously_curated_images = sorted(glob.glob(f'{curated_destination}/*.png')) + sorted(glob.glob(f'{bad_directory}/*.png'))
+    previously_curated_images = sorted(glob.glob(f'{curated_destination}/*{ext}')) + sorted(glob.glob(f'{bad_directory}/*{ext}'))
 
     # checks the curated folder and returns only the images that have not
     # yet been curated 
@@ -70,9 +72,6 @@ def parse_folder(path):
         return images_to_be_curated
 
 
-    
-    
-
 def load_image(path, window):
     try:
         #loads image into window, opens up pop up if image can not be open
@@ -83,23 +82,58 @@ def load_image(path, window):
     except:
         print(f"Unable to open {path}!")
         sg.popup("Unable to open image!")
-        
+
+
 def copy_image(img, dest):
     try:
         #take copy of image and put it in destination
         shutil.copy(img, dest)
     except:
         print(f"Unable to copy image!")
-                
+
+
 def save_to_good_csv(path, values):
+    header = ['File Name', 'Status', 'Time']
     with open(os.path.join(path, 'curated_Good_Images.csv'), 'w+', newline='') as file:
-        write = csv.writer(file)
-        write.writerows(values)
+        writer = csv.writer(file)
+        writer.writerow(header)
+        for item in values:
+            writer.writerow([item])
+
 
 def save_to_bad_csv(path, values):
+    header = ['File Name', 'Status', 'Time']
     with open(os.path.join(path, 'curated_Bad_Images.csv'), 'w+', newline='') as file:
         writer = csv.writer(file)
-        writer.writerows(values)         
+        writer.writerow(header)
+        for item in values:
+            writer.writerow([item])        
+
+def create_csv(path):
+    now = datetime.now()
+    time_stamp = now.strftime("%d%m%Y")
+
+    curated_path = path + '/Curation_result/curated'+ time_stamp + '.csv'
+    # curate_files.to_csv(curated_path, index=False) #creates csv
+    headerList = ['Original File Path', 'Good_Or_Bad', 'Curated Path', 'Time Stamp']
+    with open(curated_path, 'w') as file:
+        dw = csv.DictWriter(file, delimiter=',', fieldnames=headerList)
+        dw.writeheader()
+    
+    return curated_path
+
+def save_csv(curated_path, location, image, image_value, destination, time_stamp):
+    
+    df_curate_files= pd.read_csv(curated_path) # loads csv into pd
+    df_curate_files = df_curate_files.append(dict(zip(df_curate_files.columns,[image, image_value, destination, time_stamp])), ignore_index=True)                                                                           
+    # df_curate_files.loc[location, 'Original File Path'] = image
+    # df_curate_files.loc[location, 'Good_Or_Bad'] = image_value
+    # df_curate_files.loc[location, 'Curated Path'] = destination
+    # # df_curate_files.loc[df_curate_files['Good_or_Bad'].notnull() & df_curate_files['Timestamp'].isnull(), 'Timestamp'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    # df_curate_files.loc[location, 'Time Stamp'] = time_stamp
+    # ({image, image_value, destination, time_stamp})
+
+    df_curate_files.to_csv(curated_path, index=False)
 
 def update_window(window, location, images):
     #updates elements in window
@@ -110,19 +144,8 @@ def update_window(window, location, images):
     except:
         sg.popup("Folder has been curated!")
 
-# def progress_bar():
-#     # set len(mylist) to length of current images
-#     progressbar = [
-#     [sg.ProgressBar(len(mylist), orientation='h', size=(51, 10), key='progressbar')]
-#     ]
-    
-#     layout = [
-#         [sg.Frame('Progress',layout= progressbar)]
-#     ]
 
 def main():
-    
-
     
     options_selection_column = [
 
@@ -195,8 +218,14 @@ def main():
         if event == "Exit" or event == sg.WIN_CLOSED:
             break
         elif event == "file":
+            print(values["file"])
+            images = []
+            good_images = []
+            bad_images = []
+            location = 0
             pre_curation(values["file"])
             images = parse_folder(values["file"])
+            curated_path = create_csv(values["file"])
             if images:
                 load_image(images[0], window)
             update_window(window, location, images)
@@ -233,16 +262,16 @@ def main():
                 if values["-GOOD-"] == True:
                     copy_image(images[location], curated_destination)
                     image_value = "Good"
-                    good_images.append(images[location] + image_value + time_stamp)
+                    good_images.append(images[location] + " , " + image_value + " , " + time_stamp)
                     location += 1
                     load_image(images[location], window)
-                    save_to_good_csv(curated_destination, good_images)
+                    save_csv(curated_path, location, images[location], image_value, curated_destination, time_stamp)
                 else:
                     copy_image(images[location], bad_directory)
                     location += 1
                     load_image(images[location], window)
-                    bad_images.append(images[location] + image_value + time_stamp)
-                    save_to_bad_csv(bad_directory, bad_images)
+                    bad_images.append(images[location] + " , " +  image_value + " , " +  time_stamp)
+                    save_csv(curated_path, location, images[location], image_value, bad_directory, time_stamp)
             except IndexError:
                 sg.popup("Folder has been curated!")
             try:
@@ -250,7 +279,6 @@ def main():
                 print(images[location], image_value)
             except:
                 pass
-        
     window.close()
 
 

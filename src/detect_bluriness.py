@@ -5,9 +5,9 @@ import glob
 import os
 import shutil
 
-blur = 'Bad_images/blur_images'
-good_images = 'Good_images'
-bad_images = 'Bad_images'
+blur = 'Filtering_result/blur_images'
+good_images = 'Filtering_result/sample_images'
+ext = ['.jpg', '.jpeg', '.jfif', '.pjpeg', '.pjp', '.png', '.svg', '.webp', '.avif', '.apng'] 
 
 
 # iterates through images and detects bluriness using Laplacian eqtn &
@@ -16,21 +16,17 @@ def detect_blur(path):
     
     #sets the minimum the variance of laplacian can be when evaluating bluriness
     #if a majority of the photos are coming out blurry due to lowlight change the variable to 25
-    blur_minimum = 50
-    
+    blur_minimum = 25    
     #set paths for good/bad images
     global blur
     global good_images
-    global bad_images
-    images = sorted(glob.glob(path + '/*.png'))
-    bad_images = os.path.join(path, bad_images)
+    images = sorted(glob.glob(f'{path}/*{ext}'))
     blur = os.path.join(path, blur)
     good_images = os.path.join(path, good_images)
     blurry_images = 0
 
 
     # makes the directories to send images to
-    os.makedirs(bad_images, exist_ok=True)
     os.makedirs(blur, exist_ok=True)
     os.makedirs(good_images, exist_ok=True)
 
